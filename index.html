@@ -1,22 +1,22 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mirror Runner - NeuroPlay INC</title>
 <style>
 :root{
   --bg:#04020b;
-  --player:#7cffd6;
-  --obstacle:#ff6b6b;
+  --player:#00fff0;
+  --obstacle:#ff4d4d;
   --power:#ffd166;
   --text:#e9f8f3;
 }
 html,body{margin:0;padding:0;height:100%;background:var(--bg);display:flex;justify-content:center;align-items:center;font-family:sans-serif;overflow:hidden;}
 canvas{background:linear-gradient(180deg,#041123,#020512);display:block;}
-.hud{position:absolute;top:16px;left:16px;color:var(--text);font-weight:bold;font-size:18px;}
-.leaderboard{position:absolute;top:16px;right:16px;color:var(--text);background:rgba(0,0,0,0.2);padding:8px 12px;border-radius:8px;font-size:14px;}
-.btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:12px 20px;background:rgba(255,255,255,0.1);border:none;color:var(--text);cursor:pointer;border-radius:8px;font-weight:bold;display:none;}
+.hud{position:absolute;top:16px;left:16px;color:var(--text);font-weight:bold;font-size:20px;text-shadow:0 0 6px #00fff0;}
+.leaderboard{position:absolute;top:16px;right:16px;color:var(--text);background:rgba(0,0,0,0.3);padding:8px 12px;border-radius:8px;font-size:14px;}
+.btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);padding:14px 24px;background:rgba(255,255,255,0.1);border:none;color:var(--text);cursor:pointer;border-radius:12px;font-weight:bold;display:none;}
 footer{position:absolute;bottom:8px;width:100%;text-align:center;color:#e9f8f3;font-size:14px;pointer-events:none;}
 </style>
 </head>
@@ -27,185 +27,162 @@ footer{position:absolute;bottom:8px;width:100%;text-align:center;color:#e9f8f3;f
 <footer>This game is a creation of <strong>NeuroPlay INC</strong></footer>
 <canvas id="gameCanvas"></canvas>
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-let W = canvas.width = 1000;
-let H = canvas.height = 400;
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+let W=canvas.width=1000,H=canvas.height=400;
 
-// Resize canvas for mobile
+// Resize for mobile
 function resizeCanvas(){
-  const ratio = 16/9;
-  let width = window.innerWidth - 32;
-  let height = window.innerHeight - 32;
-  if(width/height>ratio) width = height*ratio;
-  else height = width/ratio;
-  canvas.style.width = width+'px';
-  canvas.style.height = height+'px';
+  const ratio=16/9;
+  let width=window.innerWidth-32,height=window.innerHeight-32;
+  if(width/height>ratio) width=height*ratio; else height=width/ratio;
+  canvas.style.width=width+'px'; canvas.style.height=height+'px';
 }
-window.addEventListener('resize',resizeCanvas);
-resizeCanvas();
+window.addEventListener('resize',resizeCanvas); resizeCanvas();
 
 // Game variables
-let player = {x:150,y:H-60,w:40,h:40,vY:0,flipped:false,shield:false};
-let obstacles = [];
-let particles = [];
-let powerups = [];
-let speed = 6;
-let score = 0;
-let gameOver = false;
-let spawnInterval = 1200;
-let spawnTimer = 0;
-let powerTimer = 0;
-let multiplier = 1;
-const leaderboardEl = document.getElementById('leaderboard');
+let player={x:150,y:H-60,w:40,h:40,vY:0,flipped:false,shield:false,trails:[]};
+let obstacles=[],particles=[],powerups=[];
+let speed=6,score=0,gameOver=false,spawnInterval=1200,spawnTimer=0,powerTimer=0,multiplier=1;
+let difficultyLevel=0;
+const leaderboardEl=document.getElementById('leaderboard');
 
 // Load leaderboard
-let leaderboard = JSON.parse(localStorage.getItem('mirrorRunnerLeaderboard')||'[]');
+let leaderboard=JSON.parse(localStorage.getItem('mirrorRunnerLeaderboard')||'[]');
 function updateLeaderboard(){
-  leaderboard.sort((a,b)=>b-a);
-  leaderboard = leaderboard.slice(0,5);
-  localStorage.setItem('mirrorRunnerLeaderboard', JSON.stringify(leaderboard));
-  leaderboardEl.innerHTML = 'Leaderboard:<br>' + leaderboard.map(s=>'🏆 '+s).join('<br>');
+  leaderboard.sort((a,b)=>b-a); leaderboard=leaderboard.slice(0,5);
+  localStorage.setItem('mirrorRunnerLeaderboard',JSON.stringify(leaderboard));
+  leaderboardEl.innerHTML='Leaderboard:<br>'+leaderboard.map(s=>'🏆 '+s).join('<br>');
 }
 updateLeaderboard();
+
+// Sounds
+const flipSound=new Audio('https://assets.codepen.io/3/beep.mp3');
+const hitSound=new Audio('https://assets.codepen.io/3/hit.mp3');
 
 // Controls
 function flip(){
   if(gameOver) return;
-  player.flipped = !player.flipped;
-  player.vY=0;
-  // Flip particles
-  for(let i=0;i<15;i++){
-    particles.push({
-      x:player.x+player.w/2,
-      y:player.y+player.h/2,
-      vx:(Math.random()-0.5)*6,
-      vy:(Math.random()-0.5)*6,
-      life:30
-    });
-  }
+  player.flipped=!player.flipped; player.vY=0;
+  flipSound.play();
+  for(let i=0;i<20;i++) particles.push({
+    x:player.x+player.w/2,
+    y:player.y+player.h/2,
+    vx:(Math.random()-0.5)*6,
+    vy:(Math.random()-0.5)*6,
+    life:30
+  });
 }
-window.addEventListener('keydown', e=>{if(e.code==='Space') flip();});
-canvas.addEventListener('pointerdown', flip);
+window.addEventListener('keydown',e=>{if(e.code==='Space') flip();});
+canvas.addEventListener('pointerdown',flip);
 
 // Restart
-const restartBtn = document.getElementById('restartBtn');
+const restartBtn=document.getElementById('restartBtn');
 restartBtn.addEventListener('click',()=>{
-  player={x:150,y:H-60,w:40,h:40,vY:0,flipped:false,shield:false};
-  obstacles=[]; particles=[]; powerups=[]; speed=6; spawnInterval=1200; score=0; spawnTimer=0; gameOver=false; multiplier=1;
-  restartBtn.style.display='none';
-  requestAnimationFrame(gameLoop);
+  player={x:150,y:H-60,w:40,h:40,vY:0,flipped:false,shield:false,trails:[]};
+  obstacles=[];particles=[];powerups=[];speed=6;spawnInterval=1200;score=0;spawnTimer=0;gameOver=false;multiplier=1; difficultyLevel=0;
+  restartBtn.style.display='none'; requestAnimationFrame(gameLoop);
 });
 
 // Spawn obstacles
 function spawnObstacle(){
-  const h = 30 + Math.random()*70;
-  const moving = Math.random()<0.2;
-  const topY = 20 + Math.random()*(H/2-50);
-  const bottomY = H/2 + 20 + Math.random()*(H/2-50);
-  obstacles.push({x:W+20,y:topY,w:20,h:h,moving:moving,dir:1,lane:'top'});
-  obstacles.push({x:W+20,y:bottomY,w:20,h:h,moving:moving,dir:1,lane:'bottom'});
+  const h=30+Math.random()*70,moving=Math.random()<0.3;
+  const y=Math.random()<0.5?20: H-20-h;
+  obstacles.push({x:W+20,y:y,w:20,h:h,moving:moving,dir:1});
 }
 
 // Spawn powerups
 function spawnPowerup(){
-  const types = ['shield','multiplier'];
-  const type = types[Math.floor(Math.random()*types.length)];
-  const topY = 20+Math.random()*(H/2-40);
-  const bottomY = H/2 + 20 + Math.random()*(H/2-40);
-  powerups.push({x:W+20,y:topY,w:20,h:20,type:type,lane:'top'});
-  powerups.push({x:W+20,y:bottomY,w:20,h:20,type:type,lane:'bottom'});
+  const types=['shield','multiplier'],type=types[Math.floor(Math.random()*types.length)];
+  const y=Math.random()<0.5?20:H-40;
+  powerups.push({x:W+20,y:y,w:20,h:20,type:type});
+}
+
+// Update difficulty
+function updateDifficulty(){
+  const newLevel=Math.floor(score/100);
+  if(newLevel>difficultyLevel){
+    difficultyLevel=newLevel;
+    speed +=1;
+    spawnInterval=Math.max(500,spawnInterval-100);
+  }
 }
 
 // Main loop
-let lastTime = performance.now();
+let lastTime=performance.now();
 function gameLoop(now){
-  let dt = now - lastTime;
-  lastTime = now;
-  if(gameOver) return;
+  let dt=now-lastTime; lastTime=now;if(gameOver) return;
 
   ctx.clearRect(0,0,W,H);
 
-  // Gravity & movement
-  const gravity = 0.7;
-  if(player.flipped){player.vY-=gravity; if(player.y<0) player.y=0; } 
-  else {player.vY+=gravity; if(player.y+player.h>H) player.y=H-player.h;}
-  player.y += player.vY;
+  // Gravity
+  const gravity=0.7;
+  if(player.flipped){player.vY-=gravity;if(player.y<0) player.y=0;}
+  else{player.vY+=gravity;if(player.y+player.h>H) player.y=H-player.h;}
+  player.y+=player.vY;
 
-  // Draw player
-  ctx.fillStyle = player.shield ? '#ffd166' : '#7cffd6';
+  // Neon trail
+  player.trails.push({x:player.x+player.w/2,y:player.y+player.h/2,life:20});
+  for(let i=player.trails.length-1;i>=0;i--){
+    const t=player.trails[i];
+    ctx.fillStyle='rgba(0,255,240,'+t.life/20+')';
+    ctx.beginPath(); ctx.arc(t.x,t.y,6,0,2*Math.PI); ctx.fill();
+    t.life--; if(t.life<=0) player.trails.splice(i,1);
+  }
+
+  // Player
+  ctx.fillStyle=player.shield?'#ffd166':'#00fff0';
   ctx.fillRect(player.x,player.y,player.w,player.h);
 
   // Spawn obstacles
-  spawnTimer += dt;
-  if(spawnTimer>spawnInterval){spawnTimer=0; spawnObstacle();}
+  spawnTimer+=dt; if(spawnTimer>spawnInterval){spawnTimer=0;spawnObstacle();}
   if(Math.random()<0.005) spawnPowerup();
 
-  // Draw & move obstacles
+  // Obstacles
   for(let i=obstacles.length-1;i>=0;i--){
-    let ob=obstacles[i];
-    ob.x -= speed;
-    if(ob.moving){ ob.y += ob.dir*2; if(ob.y<0||ob.y+ob.h>H) ob.dir*=-1; }
-    ctx.fillStyle='#ff6b6b';
-    ctx.fillRect(ob.x,ob.y,ob.w,ob.h);
+    let ob=obstacles[i]; ob.x-=speed;
+    if(ob.moving){ob.y+=ob.dir*2;if(ob.y<0||ob.y+ob.h>H) ob.dir*=-1;}
+    ctx.fillStyle='#ff4d4d'; ctx.shadowColor='#ff4d4d'; ctx.shadowBlur=8;
+    ctx.fillRect(ob.x,ob.y,ob.w,ob.h); ctx.shadowBlur=0;
 
-    // Collision
-    const topCheck = ob.lane==='top' && player.y<H/2;
-    const bottomCheck = ob.lane==='bottom' && player.y>=H/2;
-    if(player.x<ob.x+ob.w && player.x+player.w>ob.x && player.y<ob.y+ob.h && player.y+player.h>ob.y && (topCheck||bottomCheck)){
-      if(player.shield){player.shield=false; obstacles.splice(i,1);}
-      else {gameOver=true; leaderboard.push(Math.floor(score)); updateLeaderboard(); restartBtn.style.display='block';}
+    if(player.x<ob.x+ob.w&&player.x+player.w>ob.x&&player.y<ob.y+ob.h&&player.y+player.h>ob.y){
+      if(player.shield){player.shield=false;obstacles.splice(i,1);}
+      else{hitSound.play();gameOver=true;leaderboard.push(Math.floor(score));updateLeaderboard();restartBtn.style.display='block';}
     }
-
     if(ob.x+ob.w<0) obstacles.splice(i,1);
   }
 
   // Powerups
   for(let i=powerups.length-1;i>=0;i--){
-    let p=powerups[i];
-    p.x -= speed;
-    ctx.fillStyle = p.type==='shield'?'#ffd166':'#b77bff';
-    ctx.fillRect(p.x,p.y,p.w,p.h);
+    let p=powerups[i]; p.x-=speed;
+    ctx.fillStyle=p.type==='shield'?'#ffd166':'#b77bff';
+    ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=8;
+    ctx.fillRect(p.x,p.y,p.w,p.h); ctx.shadowBlur=0;
 
-    const laneCheck = (p.lane==='top' && player.y<H/2) || (p.lane==='bottom' && player.y>=H/2);
-    if(player.x<p.x+p.w && player.x+player.w>p.x && player.y<p.y+p.h && player.y+player.h>p.y && laneCheck){
+    if(player.x<p.x+p.w&&player.x+player.w>p.x&&player.y<p.y+p.h&&player.y+player.h>p.y){
       if(p.type==='shield') player.shield=true;
-      if(p.type==='multiplier'){multiplier=2; powerTimer=3000;}
+      if(p.type==='multiplier'){multiplier=2;powerTimer=3000;}
       powerups.splice(i,1);
     }
-
     if(p.x+p.w<0) powerups.splice(i,1);
   }
 
-  // Powerup timer
-  if(multiplier>1){
-    powerTimer -= dt;
-    if(powerTimer<=0){multiplier=1;}
-  }
+  if(multiplier>1){powerTimer-=dt;if(powerTimer<=0) multiplier=1;}
 
   // Score
-  score += dt*0.01*multiplier;
-  document.getElementById('score').textContent = Math.floor(score);
+  score+=dt*0.01*multiplier;
+  document.getElementById('score').textContent=Math.floor(score);
 
-  // Increase difficulty every 100 points
-  if(Math.floor(score/100) > Math.floor((score-dt*0.01)/100)){
-    speed += 1;
-    spawnInterval = Math.max(500, spawnInterval-100);
-  }
+  // Update difficulty
+  updateDifficulty();
 
-  // Floor & ceiling
-  ctx.fillStyle='#0a1020';
-  ctx.fillRect(0,H/2-2,W,4);
-  ctx.fillRect(0,0,W,10);
-  ctx.fillRect(0,H-10,W,10);
+  // Floor
+  ctx.fillStyle='#0a1020'; ctx.fillRect(0,H/2-2,W,4); ctx.fillRect(0,H-10,W,10);
 
   // Particles
   for(let i=particles.length-1;i>=0;i--){
-    let p=particles[i];
-    ctx.fillStyle='rgba(255,255,255,'+p.life/30+')';
-    ctx.fillRect(p.x,p.y,4,4);
-    p.x+=p.vx; p.y+=p.vy; p.life--;
-    if(p.life<=0) particles.splice(i,1);
+    let p=particles[i]; ctx.fillStyle='rgba(255,255,255,'+p.life/30+')'; ctx.fillRect(p.x,p.y,4,4);
+    p.x+=p.vx; p.y+=p.vy; p.life--; if(p.life<=0) particles.splice(i,1);
   }
 
   requestAnimationFrame(gameLoop);
